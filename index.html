@@ -52,8 +52,8 @@ function go(t){tab=t;history.replaceState(null,'',t==='nuevo'?'#nuevo':'#');rend
 $('#nav').onclick=e=>{const t=e.target.dataset.t;if(t)go(t)};
 function render(){Object.values(charts).forEach(c=>c.destroy());charts={};
  if(!user){$('#nav').style.display='none';return authView()}
- $('#nav').style.display='flex';document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.t===tab));
- ({panel,nuevo,movs,datos})[tab]()}
+ $('#nav').style.display=tab==='rapido'?'none':'flex';document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.t===tab));
+ ({panel,nuevo,movs,datos,rapido})[tab]()}
 function authView(){$('#app').innerHTML=`<div class="card" style="max-width:380px;margin:12vh auto"><h1>💸 Mis Gastos</h1>
 <input id="em" type="email" placeholder="Email" autocomplete="username"><br><br><input id="pw" type="password" placeholder="Contraseña" autocomplete="current-password"><br><br>
 <div class="row"><button class="b" id="in">Entrar</button><button class="b g" id="up">Crear cuenta</button></div></div>`;
@@ -99,6 +99,14 @@ function nuevo(e){const f={};rows.filter(r=>r.kind==='Gastos').forEach(r=>f[r.ca
   if(e)rows=rows.map(x=>x.id===e.id?data:x);else rows.unshift(data);rows.sort((a,b)=>b.occurred_at.localeCompare(a.occurred_at));
   toast(`✓ ${fmt(amt)} guardado`);e?go('movs'):nuevo()};
  if(e){$('#cn').onclick=()=>go('movs');$('#del').onclick=async()=>{if(!confirm('¿Eliminar este movimiento?'))return;const{error}=await sb.from('expenses').delete().eq('id',e.id);if(error)return toast(error.message);rows=rows.filter(x=>x.id!==e.id);go('movs')}}}
+function rapido(){const f={};rows.filter(r=>r.kind==='Gastos'&&ok(r)).forEach(r=>f[r.category]=(f[r.category]||0)+1);
+ const top=Object.entries(f).sort((a,b)=>b[1]-a[1]).slice(0,12).map(x=>x[0]);
+ $('#app').innerHTML=`<input id="a" class="amt" inputmode="decimal" placeholder="Monto"><input id="n" placeholder="Nota (opcional)" style="margin:8px 0 14px"><div class="chips" style="gap:10px">${top.map(c=>`<button class="chip" style="flex:1 1 45%;padding:16px;font-size:16px" data-c="${esc(c)}">${esc(c)}</button>`).join('')}</div><div class="m" style="text-align:center;margin-top:18px"><a href="#" id="gp" style="color:var(--mut)">Ir al panel</a></div>`;
+ $('#a').focus();
+ document.querySelectorAll('[data-c]').forEach(b=>b.onclick=async()=>{const amt=parseFloat($('#a').value.replace(',','.'));if(!(amt>0))return toast('Pon el monto');
+  const{data,error}=await sb.from('expenses').insert({user_id:user.id,occurred_at:nowIso(),account:'Cuentas bancarias',category:b.dataset.c,note:$('#n').value.trim(),kind:'Gastos',amount:amt,currency:'BOB',fx:1}).select().single();
+  if(error)return toast(error.message);rows.unshift(data);toast(`✓ ${fmt(amt)} · ${b.dataset.c}`);rapido()});
+ $('#gp').onclick=e=>{e.preventDefault();go('panel')}}
 function movs(){const ms=months();$('#app').innerHTML=`<h1>Movimientos</h1><div class="row"><input id="q" placeholder="Buscar…"><select id="mf"><option value="">Todos los meses</option>${ms.map(m=>`<option>${m}</option>`).join('')}</select></div><br><div class="card" id="l"></div>`;
  const draw=()=>{const q=$('#q').value.toLowerCase(),m=$('#mf').value;
   const L=rows.filter(r=>(!m||r.occurred_at.startsWith(m))&&(`${r.category} ${r.note} ${r.description||''}`.toLowerCase().includes(q))).slice(0,200);
@@ -159,5 +167,5 @@ async function importFile(f){if(!f)return;const st=$('#st');st.textContent='Leye
 $('#app').innerHTML='<div class="m" style="text-align:center;margin-top:30vh">Cargando…</div>';
 let lastUid;
 sb.auth.onAuthStateChange((ev,s)=>{const u=s?.user||null;if((u?.id||null)===lastUid)return;lastUid=u?.id||null;
- setTimeout(async()=>{user=u;if(user){try{await load()}catch(e){toast(String(e.message||e))}tab=location.hash==='#nuevo'?'nuevo':'panel'}else rows=[];render()},0)});
+ setTimeout(async()=>{user=u;if(user){try{await load()}catch(e){toast(String(e.message||e))}tab=location.hash==='#rapido'?'rapido':location.hash==='#nuevo'?'nuevo':'panel'}else rows=[];render()},0)});
 </script></body></html>
