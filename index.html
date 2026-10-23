@@ -33,7 +33,7 @@ canvas{max-height:300px}.x{background:none;border:0;color:var(--mut);font-size:1
 <main id="app"></main><div id="toast"></div>
 <nav id="nav"><button data-t="panel">📊 Panel</button><button data-t="nuevo">＋ Nuevo</button><button data-t="movs">📄 Movimientos</button><button data-t="datos">⚙️ Datos</button></nav>
 <script>
-const SB_URL='https://oaeeocgxmdelgqtlcjrg.supabase.co/rest/v1/', SB_KEY='sb_publishable_JZ-9oPp9Lt6fekoxSUtz5A_Zx7awb8-';
+const SB_URL='https://oaeeocgxmdelgqtlcjrg.supabase.co', SB_KEY='sb_publishable_JZ-9oPp9Lt6fekoxSUtz5A_Zx7awb8-';
 const sb=supabase.createClient(SB_URL,SB_KEY);
 let rows=[],user=null,tab='panel',month='',charts={};
 let S={rates:{BOB:1,USD:6.96,EUR:8.1},budgets:{},excl:['Dinero restante'],rec:[]};
