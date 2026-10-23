@@ -59,7 +59,7 @@ button.b:disabled{opacity:.45;cursor:default}
 const SB_URL='https://oaeeocgxmdelgqtlcjrg.supabase.co', SB_KEY='sb_publishable_JZ-9oPp9Lt6fekoxSUtz5A_Zx7awb8-';
 const sb=supabase.createClient(SB_URL,SB_KEY);
 let rows=[],user=null,tab='panel',month='',charts={};
-let S={mode:'oficial',fx:{},rates:{BOB:1,USD:11.84,EUR:13.23},budgets:{},excl:['Dinero restante'],rec:[]};
+let S={mode:'oficial',fx:{},rates:{BOB:1,USD:11.84,EUR:13.23},budgets:{},excl:['Dinero restante']};
 const $=s=>document.querySelector(s),pad=n=>String(n).padStart(2,'0');
 const fmt=n=>(+n).toLocaleString('es-BO',{minimumFractionDigits:2,maximumFractionDigits:2});
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -143,28 +143,16 @@ async function autoFx(){const o={};
 function applyFx(){if(S.mode==='manual')return;const u=S.fx[S.mode==='paralelo'?'pa':'of']||S.rates.USD;S.rates.USD=u;if(S.fx.eu)S.rates.EUR=u/S.fx.eu}
 const saveS=()=>sb.from('settings').upsert({user_id:user.id,data:S});
 async function loadS(){const{data}=await sb.from('settings').select('data').maybeSingle();if(data?.data)S={...S,...data.data,rates:{...S.rates,...(data.data.rates||{})}};if(S.mode!=='manual'){applyFx();await autoFx();saveS()}}
-async function recur(){const cur=nowIso().slice(0,7),td=+nowIso().slice(8,10),add=[];
- S.rec.forEach(x=>{for(let m=x.last?nx(x.last):x.start;m<=cur;m=nx(m)){if(m===cur&&x.day>td)break;add.push({user_id:user.id,occurred_at:`${m}-${pad(x.day)}T09:00:00`,account:x.account,category:x.category,note:x.note,kind:x.kind,amount:x.amount,currency:x.currency,fx:S.rates[x.currency]||1});x.last=m}});
- if(!add.length)return 0;const{data}=await sb.from('expenses').upsert(add,{onConflict:'user_id,occurred_at,amount,category,note',ignoreDuplicates:true}).select();
- rows.push(...(data||[]));rows.sort((a,b)=>b.occurred_at.localeCompare(a.occurred_at));await saveS();return(data||[]).length}
-function pend(){const cur=nowIso().slice(0,7),td=+nowIso().slice(8,10);let n=0;S.rec.forEach(x=>{for(let m=x.last?nx(x.last):x.start;m<=cur;m=nx(m)){if(m===cur&&x.day>td)break;n++}});return n}
 function cfg(){const cats=[...new Set(rows.filter(r=>r.kind==='Gastos').map(r=>r.category))].sort();
  return `<div class="card"><h2>Tipo de cambio a BOB</h2><select id="fm"><option value="oficial" ${S.mode==='oficial'?'selected':''}>Automático · dólar oficial (BCB)</option><option value="paralelo" ${S.mode==='paralelo'?'selected':''}>Automático · dólar paralelo (Binance P2P)</option><option value="manual" ${S.mode==='manual'?'selected':''}>Manual</option></select>
  <div class="m" style="margin:10px 0;line-height:1.6">Ahora: 1 USD = ${fmt(S.rates.USD)} BOB · 1 EUR = ${fmt(S.rates.EUR)} BOB<br>Oficial ${S.fx.of||'—'} · Paralelo ${S.fx.pa||'—'}<br>EUR/USD ${S.fx.eu||'—'}${S.fx.at?' · leído '+S.fx.at.slice(0,16).replace('T',' '):''}</div>
  <div class="f2"><div><div class="lab">1 USD =</div><div class="ib"><input id="r1" inputmode="decimal" value="${(+S.rates.USD).toFixed(2)}"><span>BOB</span></div></div><div><div class="lab">1 EUR =</div><div class="ib"><input id="r2" inputmode="decimal" value="${(+S.rates.EUR).toFixed(2)}"><span>BOB</span></div></div></div>
  <div class="m" style="margin-top:6px">Solo se usan en modo Manual.</div></div>
  <div class="card"><h2>Categorías excluidas</h2><div class="m" style="margin-bottom:8px">No cuentan en estadísticas ni en el acumulado. Sepáralas con coma.</div><input id="ex2" value="${esc(S.excl.join(', '))}"></div>
- <div class="card"><h2>Presupuesto mensual (BOB)</h2>${cats.map(c=>`<div class="bg"><span>${esc(c)}</span><input data-b="${esc(c)}" inputmode="decimal" value="${S.budgets[c]||''}" placeholder="—"></div>`).join('')||'<div class="m">Aún no hay categorías</div>'}<br><button class="b" id="sv">Guardar ajustes</button></div>
- <div class="card"><h2>Movimientos recurrentes</h2><div class="m" style="margin-bottom:6px">No se crean solos. Cuando quieras, pulsa «Crear pendientes» y se registra el movimiento de cada mes que toque.</div>${S.rec.map((x,i)=>`<div class="rcl"><div><div>${esc(x.category)}</div><div class="m">${x.kind==='Ingreso'?'Ingreso':'Gasto'} · ${fmt(x.amount)} ${x.currency} · día ${x.day}</div></div><button class="x" data-rd="${i}">🗑</button></div>`).join('')}
- <div class="f2" style="margin-top:12px"><input class="s2" id="rc" placeholder="Categoría"><input id="ra" placeholder="Importe" inputmode="decimal"><select id="ru"><option>BOB</option><option>USD</option><option>EUR</option></select><select id="rk"><option>Gastos</option><option>Ingreso</option></select><input id="rd" type="number" inputmode="numeric" min="1" max="28" placeholder="Día (1-28)"></div><br>
- <button class="b g" id="ra2">Añadir recurrente</button>${S.rec.length?`<br><br><button class="b" id="rr" ${pend()?'':'disabled'}>Crear pendientes (${pend()})</button>`:''}</div>`}
+ <div class="card"><h2>Presupuesto mensual (BOB)</h2>${cats.map(c=>`<div class="bg"><span>${esc(c)}</span><input data-b="${esc(c)}" inputmode="decimal" value="${S.budgets[c]||''}" placeholder="—"></div>`).join('')||'<div class="m">Aún no hay categorías</div>'}<br><button class="b" id="sv">Guardar ajustes</button></div>`}
 function cfgBind(){const n=v=>parseFloat(String(v).replace(',','.'));
  $('#sv').onclick=async()=>{S.mode=$('#fm').value;if(S.mode==='manual'){S.rates.USD=n($('#r1').value)||S.rates.USD;S.rates.EUR=n($('#r2').value)||S.rates.EUR}else applyFx();S.excl=$('#ex2').value.split(',').map(x=>x.trim()).filter(Boolean);
-  S.budgets={};document.querySelectorAll('[data-b]').forEach(i=>{const v=n(i.value);if(v>0)S.budgets[i.dataset.b]=v});await saveS();toast('✓ Ajustes guardados')};
- $('#ra2').onclick=async()=>{const a=n($('#ra').value),d=+$('#rd').value;if(!(a>0)||!(d>=1&&d<=28)||!$('#rc').value)return toast('Completa categoría, importe y día (1-28)');
-  S.rec.push({category:$('#rc').value.trim(),amount:a,kind:$('#rk').value,currency:$('#ru').value,day:d,account:'Cuentas bancarias',note:'Recurrente',start:nowIso().slice(0,7),last:null});await saveS();datos()};
- if($('#rr'))$('#rr').onclick=async()=>{const n=await recur();toast(n?`✓ ${n} creados`:'Nada pendiente');datos()};
- document.querySelectorAll('[data-rd]').forEach(b=>b.onclick=async()=>{S.rec.splice(+b.dataset.rd,1);await saveS();datos()})}
+  S.budgets={};document.querySelectorAll('[data-b]').forEach(i=>{const v=n(i.value);if(v>0)S.budgets[i.dataset.b]=v});await saveS();toast('✓ Ajustes guardados')};}
 function exportCsv(){const H=['Según un período','Cuentas','Categoría','Nota','Ingreso/Gasto','Descripción','Importe','Moneda'],q=v=>`"${String(v??'').replace(/"/g,'""')}"`;
  const t='\ufeff'+[H.map(q).join(',')].concat(rows.map(r=>[r.occurred_at.replace('T',' '),r.account,r.category,r.note,r.kind,r.description,r.amount,r.currency].map(q).join(','))).join('\n');
  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([t],{type:'text/csv'}));a.download=`gastos-${nowIso().slice(0,10)}.csv`;a.click()}
