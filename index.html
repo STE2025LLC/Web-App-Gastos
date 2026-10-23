@@ -156,5 +156,8 @@ async function importFile(f){if(!f)return;const st=$('#st');st.textContent='Leye
   const{data,error}=await sb.from('expenses').upsert(out.slice(i,i+500),{onConflict:'user_id,occurred_at,amount,category,note',ignoreDuplicates:true}).select('id');
   if(error){st.textContent='Error: '+error.message;return}n+=data.length}
  st.textContent=`✓ ${n} nuevos importados, ${out.length-n} ya existían.`;await load()}
-sb.auth.onAuthStateChange(async(_,s)=>{user=s?.user||null;if(user){await load();tab=location.hash==='#nuevo'?'nuevo':'panel'}else rows=[];render()});
+$('#app').innerHTML='<div class="m" style="text-align:center;margin-top:30vh">Cargando…</div>';
+let lastUid;
+sb.auth.onAuthStateChange((ev,s)=>{const u=s?.user||null;if((u?.id||null)===lastUid)return;lastUid=u?.id||null;
+ setTimeout(async()=>{user=u;if(user){try{await load()}catch(e){toast(String(e.message||e))}tab=location.hash==='#nuevo'?'nuevo':'panel'}else rows=[];render()},0)});
 </script></body></html>
