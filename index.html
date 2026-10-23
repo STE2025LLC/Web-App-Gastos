@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="es"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="apple-mobile-web-app-capable" content="yes"><meta name="theme-color" content="#0b0f17">
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="theme-color" content="#0b0f17"><meta name="apple-mobile-web-app-title" content="Gastos"><link rel="manifest" href="manifest.webmanifest"><link rel="apple-touch-icon" href="icon-180.png">
 <title>Mis Gastos</title>
 <style>
 :root{--bg:#0b0f17;--card:#141a26;--line:#222b3b;--tx:#e8ecf4;--mut:#8b96ab;--ac:#6c8cff;--ok:#34d399;--bad:#f87171}
@@ -36,15 +36,18 @@ canvas{max-height:300px}.x{background:none;border:0;color:var(--mut);font-size:1
 const SB_URL='https://oaeeocgxmdelgqtlcjrg.supabase.co/rest/v1/', SB_KEY='sb_publishable_JZ-9oPp9Lt6fekoxSUtz5A_Zx7awb8-';
 const sb=supabase.createClient(SB_URL,SB_KEY);
 let rows=[],user=null,tab='panel',month='',charts={};
+let S={rates:{BOB:1,USD:6.96,EUR:8.1},budgets:{},excl:['Dinero restante'],rec:[]};
 const $=s=>document.querySelector(s),pad=n=>String(n).padStart(2,'0');
 const fmt=n=>(+n).toLocaleString('es-BO',{minimumFractionDigits:2,maximumFractionDigits:2});
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const nowIso=()=>{const d=new Date();return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`};
 const PAL=['#6c8cff','#34d399','#fbbf24','#f87171','#a78bfa','#22d3ee','#fb923c','#f472b6','#94a3b8'];
 function toast(t){const e=$('#toast');e.textContent=t;e.classList.add('s');setTimeout(()=>e.classList.remove('s'),2200)}
-async function load(){rows=[];for(let i=0;;i+=1000){const{data,error}=await sb.from('expenses').select('*').order('occurred_at',{ascending:false}).order('id').range(i,i+999);if(error){toast(error.message);break}rows.push(...data);if(data.length<1000)break}}
+async function load(){rows=[];for(let i=0;;i+=1000){const{data,error}=await sb.from('expenses').select('*').order('occurred_at',{ascending:false}).order('id').range(i,i+999);if(error){toast(error.message);break}rows.push(...data);if(data.length<1000)break}await loadS()}
 const months=()=>[...new Set(rows.map(r=>r.occurred_at.slice(0,7)))].sort().reverse();
-const sum=(m,k='Gastos')=>rows.filter(r=>r.kind===k&&r.occurred_at.startsWith(m)).reduce((a,r)=>a+ +r.amount,0);
+const bob=r=>+r.amount*(S.rates[r.currency]||1),ok=r=>!S.excl.includes((r.category||'').trim());
+const sum=(m,k='Gastos')=>rows.filter(r=>r.kind===k&&ok(r)&&r.occurred_at.startsWith(m)).reduce((a,r)=>a+bob(r),0);
+const carry=m=>months().filter(x=>x<m).reduce((a,x)=>a+sum(x,'Ingreso')-sum(x),0);
 function go(t){tab=t;history.replaceState(null,'',t==='nuevo'?'#nuevo':'#');render()}
 $('#nav').onclick=e=>{const t=e.target.dataset.t;if(t)go(t)};
 function render(){Object.values(charts).forEach(c=>c.destroy());charts={};
@@ -59,46 +62,73 @@ function authView(){$('#app').innerHTML=`<div class="card" style="max-width:380p
 function panel(){const ms=months();if(!ms.includes(month))month=ms[0]||nowIso().slice(0,7);
  const i=ms.indexOf(month),prev=ms[i+1],G=sum(month),I=sum(month,'Ingreso'),P=prev?sum(prev):0,d=P?(G-P)/P*100:null;
  const avg=ms.length?ms.reduce((a,m)=>a+sum(m),0)/ms.length:0;
- const cats={};rows.filter(r=>r.kind==='Gastos'&&r.occurred_at.startsWith(month)).forEach(r=>cats[r.category]=(cats[r.category]||0)+ +r.amount);
+ const cats={};rows.filter(r=>r.kind==='Gastos'&&ok(r)&&r.occurred_at.startsWith(month)).forEach(r=>cats[r.category]=(cats[r.category]||0)+bob(r));
  const cl=Object.entries(cats).sort((a,b)=>b[1]-a[1]);
  $('#app').innerHTML=`<div class="row"><h1 style="flex:2">Panel</h1><select id="ms">${ms.map(m=>`<option ${m===month?'selected':''}>${m}</option>`).join('')}</select></div>
  <div class="grid"><div class="card"><div class="k">Gastado</div><div class="v">${fmt(G)}</div><div class="m ${d>0?'neg':'pos'}">${d==null?'—':(d>0?'▲ ':'▼ ')+Math.abs(d).toFixed(1)+'% vs mes anterior'}</div></div>
  <div class="card"><div class="k">Ingresos</div><div class="v">${fmt(I)}</div></div>
- <div class="card"><div class="k">Balance</div><div class="v ${I-G<0?'neg':'pos'}">${fmt(I-G)}</div></div>
+ <div class="card"><div class="k">Disponible (con arrastre)</div><div class="v ${carry(month)+I-G<0?'neg':'pos'}">${fmt(carry(month)+I-G)}</div><div class="m">Arrastre ${fmt(carry(month))} · mes ${fmt(I-G)}</div></div>
  <div class="card"><div class="k">Media mensual</div><div class="v">${fmt(avg)}</div></div></div><br>
  <div class="card"><h2>Gasto e ingreso por mes (BOB)</h2><canvas id="c1"></canvas></div>
  <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(300px,1fr))"><div class="card"><h2>Por categoría · ${month}</h2><canvas id="c2"></canvas></div>
- <div class="card"><h2>Ranking · ${month}</h2>${cl.map(([c,v])=>`<div style="margin-bottom:12px"><div class="row" style="flex-wrap:nowrap"><span>${esc(c)}</span><b style="text-align:right">${fmt(v)}</b></div><div class="bar"><i style="width:${v/cl[0][1]*100}%"></i></div><div class="m">${(v/G*100).toFixed(1)}%</div></div>`).join('')||'<div class="m">Sin gastos este mes</div>'}</div></div>`;
+ <div class="card"><h2>Ranking · ${month}</h2>${cl.map(([c,v])=>`<div style="margin-bottom:12px"><div class="row" style="flex-wrap:nowrap"><span>${esc(c)}</span><b style="text-align:right">${fmt(v)}</b></div>${S.budgets[c]?`<div class="bar"><i style="width:${Math.min(100,v/S.budgets[c]*100)}%;background:${v>S.budgets[c]?'var(--bad)':'var(--ok)'}"></i></div><div class="m">${fmt(v)} / ${fmt(S.budgets[c])} (${(v/S.budgets[c]*100).toFixed(0)}%)</div>`:`<div class="bar"><i style="width:${v/cl[0][1]*100}%"></i></div><div class="m">${(v/G*100).toFixed(1)}%</div>`}</div>`).join('')||'<div class="m">Sin gastos este mes</div>'}</div></div>`;
  $('#ms').onchange=e=>{month=e.target.value;panel()};
  const last=ms.slice(0,12).reverse(),dark=!matchMedia('(prefers-color-scheme:light)').matches;Chart.defaults.color=dark?'#8b96ab':'#66718a';
  charts.a=new Chart($('#c1'),{type:'bar',data:{labels:last,datasets:[{label:'Gastos',data:last.map(m=>sum(m)),backgroundColor:'#6c8cff',borderRadius:6},{label:'Ingresos',data:last.map(m=>sum(m,'Ingreso')),backgroundColor:'#34d399',borderRadius:6}]},options:{scales:{y:{grid:{color:'#2a3347'}},x:{grid:{display:false}}}}});
  const top=cl.slice(0,8),rest=cl.slice(8).reduce((a,x)=>a+x[1],0);if(rest)top.push(['Otras',rest]);
  charts.b=new Chart($('#c2'),{type:'doughnut',data:{labels:top.map(x=>x[0]),datasets:[{data:top.map(x=>x[1]),backgroundColor:PAL,borderWidth:0}]},options:{cutout:'62%',plugins:{legend:{position:'bottom'}}}})}
-function nuevo(){const f={};rows.filter(r=>r.kind==='Gastos').forEach(r=>f[r.category]=(f[r.category]||0)+1);
+function nuevo(e){const f={};rows.filter(r=>r.kind==='Gastos').forEach(r=>f[r.category]=(f[r.category]||0)+1);
  const top=Object.entries(f).sort((a,b)=>b[1]-a[1]).slice(0,12).map(x=>x[0]),all=[...new Set(rows.map(r=>r.category))],accs=[...new Set(['Cuentas bancarias','Dinero en efectivo',...rows.map(r=>r.account)])];
- let kind='Gastos';
- $('#app').innerHTML=`<h1>Nuevo movimiento</h1><div class="card"><input id="a" class="amt" inputmode="decimal" placeholder="0.00" autofocus>
- <div class="row" style="margin-top:10px"><button class="chip on" id="k1">Gasto</button><button class="chip" id="k2">Ingreso</button></div>
+ let kind=e?e.kind:'Gastos';const O=(a,v)=>a.map(x=>`<option ${x===v?'selected':''}>${esc(x)}</option>`).join('');
+ $('#app').innerHTML=`<h1>${e?'Editar movimiento':'Nuevo movimiento'}</h1><div class="card"><div class="row" style="flex-wrap:nowrap"><input id="a" class="amt" inputmode="decimal" placeholder="0.00" value="${e?e.amount:''}"><select id="cu" style="flex:none;width:90px">${O(['BOB','USD','EUR'],e?.currency||'BOB')}</select></div>
+ <div class="row" style="margin-top:10px"><button class="chip ${kind==='Gastos'?'on':''}" id="k1">Gasto</button><button class="chip ${kind==='Ingreso'?'on':''}" id="k2">Ingreso</button></div>
  <div class="chips">${top.map(c=>`<button class="chip" data-c="${esc(c)}">${esc(c)}</button>`).join('')}</div>
- <input id="c" list="cl" placeholder="Categoría"><datalist id="cl">${all.map(c=>`<option value="${esc(c)}">`).join('')}</datalist><br><br>
- <input id="n" placeholder="Nota (opcional)"><br><br><select id="ac">${accs.map(a=>`<option>${esc(a)}</option>`).join('')}</select><br><br><button class="b" id="s">Guardar</button></div>`;
- $('#a').focus();
+ <input id="c" list="cl" placeholder="Categoría (ej. Sueldo)" value="${esc(e?.category||'')}"><datalist id="cl">${all.map(c=>`<option value="${esc(c)}">`).join('')}</datalist><br><br>
+ <input id="n" placeholder="Nota (opcional)" value="${esc(e?.note||'')}"><br><br>
+ <input id="d" type="datetime-local" value="${(e?.occurred_at||nowIso()).slice(0,16)}"><br><br>
+ <select id="ac">${O(accs,e?.account)}</select><br><br>
+ <input id="im" type="file" accept="image/*"><div class="m">${e?.attachment?'Ya tiene adjunto (subir otro lo reemplaza)':'Adjuntar foto o recibo (opcional)'}</div><br>
+ <button class="b" id="s">Guardar</button>${e?'<br><br><button class="b g" id="cn">Cancelar</button><br><br><button class="b g neg" id="del">Eliminar</button>':''}</div>`;
+ if(!e)$('#a').focus();
  document.querySelectorAll('.chip[data-c]').forEach(b=>b.onclick=()=>{$('#c').value=b.dataset.c;document.querySelectorAll('.chip[data-c]').forEach(x=>x.classList.toggle('on',x===b))});
  const sk=k=>{kind=k;$('#k1').classList.toggle('on',k==='Gastos');$('#k2').classList.toggle('on',k==='Ingreso')};$('#k1').onclick=()=>sk('Gastos');$('#k2').onclick=()=>sk('Ingreso');
  $('#s').onclick=async()=>{const amt=parseFloat($('#a').value.replace(',','.'));if(!(amt>0))return toast('Pon un importe');
-  const r={user_id:user.id,occurred_at:nowIso(),account:$('#ac').value,category:$('#c').value||'Otros',note:$('#n').value.trim(),kind,amount:amt,currency:'BOB'};
-  const{data,error}=await sb.from('expenses').insert(r).select().single();if(error)return toast(error.message);
-  rows.unshift(data);toast(`✓ ${fmt(amt)} guardado`);nuevo()}}
+  const r={occurred_at:$('#d').value.slice(0,16)+':00',account:$('#ac').value,category:$('#c').value||'Otros',note:$('#n').value.trim(),kind,amount:amt,currency:$('#cu').value};
+  const fl=$('#im').files[0];if(fl){const p=`${user.id}/${Date.now()}.${(fl.name.split('.').pop()||'jpg').toLowerCase()}`;const u=await sb.storage.from('receipts').upload(p,fl);if(u.error)return toast(u.error.message);r.attachment=p}
+  const{data,error}=await(e?sb.from('expenses').update(r).eq('id',e.id):sb.from('expenses').insert({...r,user_id:user.id})).select().single();if(error)return toast(error.message);
+  if(e)rows=rows.map(x=>x.id===e.id?data:x);else rows.unshift(data);rows.sort((a,b)=>b.occurred_at.localeCompare(a.occurred_at));
+  toast(`✓ ${fmt(amt)} guardado`);e?go('movs'):nuevo()};
+ if(e){$('#cn').onclick=()=>go('movs');$('#del').onclick=async()=>{if(!confirm('¿Eliminar este movimiento?'))return;const{error}=await sb.from('expenses').delete().eq('id',e.id);if(error)return toast(error.message);rows=rows.filter(x=>x.id!==e.id);go('movs')}}}
 function movs(){const ms=months();$('#app').innerHTML=`<h1>Movimientos</h1><div class="row"><input id="q" placeholder="Buscar…"><select id="mf"><option value="">Todos los meses</option>${ms.map(m=>`<option>${m}</option>`).join('')}</select></div><br><div class="card" id="l"></div>`;
  const draw=()=>{const q=$('#q').value.toLowerCase(),m=$('#mf').value;
   const L=rows.filter(r=>(!m||r.occurred_at.startsWith(m))&&(`${r.category} ${r.note} ${r.description||''}`.toLowerCase().includes(q))).slice(0,200);
-  $('#l').innerHTML=L.map(r=>`<div class="li"><div><div>${esc(r.category)}</div><div class="m">${r.occurred_at.slice(0,16).replace('T',' ')} · ${esc(r.note)}</div></div><div style="text-align:right"><b class="${r.kind==='Ingreso'?'pos':''}">${r.kind==='Ingreso'?'+':'−'}${fmt(r.amount)}</b><br><button class="x" data-d="${r.id}">🗑</button></div></div>`).join('')||'<div class="m">Nada</div>'};
+  $('#l').innerHTML=L.map(r=>`<div class="li"><div data-e="${r.id}" style="cursor:pointer;flex:1"><div>${esc(r.category)}</div><div class="m">${r.occurred_at.slice(0,16).replace('T',' ')} · ${esc(r.note)}</div></div><div style="text-align:right"><b class="${r.kind==='Ingreso'?'pos':''}">${r.kind==='Ingreso'?'+':'−'}${fmt(r.amount)} ${r.currency}</b><br>${r.attachment?`<button class="x" data-a="${esc(r.attachment)}">📎</button>`:''}<button class="x" data-d="${r.id}">🗑</button></div></div>`).join('')||'<div class="m">Nada</div>'};
  draw();$('#q').oninput=draw;$('#mf').onchange=draw;
- $('#l').onclick=async e=>{const id=e.target.dataset.d;if(!id||!confirm('¿Borrar este movimiento?'))return;const{error}=await sb.from('expenses').delete().eq('id',id);if(error)return toast(error.message);rows=rows.filter(r=>r.id!==id);draw()}}
-function datos(){$('#app').innerHTML=`<h1>Datos</h1><div class="card"><h2>Exportar</h2><button class="b" id="ex">Descargar CSV (${rows.length} movimientos)</button></div>
+ $('#l').onclick=async ev=>{const t=ev.target,ed=t.closest('[data-e]'),id=t.dataset.d;if(t.dataset.a){const w=open('');const{data}=await sb.storage.from('receipts').createSignedUrl(t.dataset.a,300);if(data)w.location=data.signedUrl;else w.close();return}if(ed&&!id)return nuevo(rows.find(x=>x.id===ed.dataset.e));if(!id||!confirm('¿Borrar este movimiento?'))return;const{error}=await sb.from('expenses').delete().eq('id',id);if(error)return toast(error.message);rows=rows.filter(r=>r.id!==id);draw()}}
+function datos(){$('#app').innerHTML=`<h1>Datos</h1>${cfg()}<div class="card"><h2>Exportar</h2><button class="b" id="ex">Descargar CSV (${rows.length} movimientos)</button></div>
  <div class="card"><h2>Importar (.xlsx o .csv, mismo formato que tu app actual)</h2><input type="file" id="f" accept=".xlsx,.xls,.csv"><p class="m" id="st">Los duplicados se ignoran, puedes importar el mismo archivo más de una vez.</p></div>
  <div class="card"><div class="m">${esc(user.email)}</div><br><button class="b g" id="out">Cerrar sesión</button></div>`;
- $('#ex').onclick=exportCsv;$('#f').onchange=e=>importFile(e.target.files[0]);$('#out').onclick=()=>sb.auth.signOut()}
+ $('#ex').onclick=exportCsv;cfgBind();$('#f').onchange=e=>importFile(e.target.files[0]);$('#out').onclick=()=>sb.auth.signOut()}
+const nx=m=>{const[y,k]=m.split('-').map(Number);return k==12?`${y+1}-01`:`${y}-${pad(k+1)}`};
+const saveS=()=>sb.from('settings').upsert({user_id:user.id,data:S});
+async function loadS(){const{data}=await sb.from('settings').select('data').maybeSingle();if(data?.data)S={...S,...data.data,rates:{...S.rates,...(data.data.rates||{})}};await recur()}
+async function recur(){const cur=nowIso().slice(0,7),td=+nowIso().slice(8,10),add=[];
+ S.rec.forEach(x=>{for(let m=x.last?nx(x.last):x.start;m<=cur;m=nx(m)){if(m===cur&&x.day>td)break;add.push({user_id:user.id,occurred_at:`${m}-${pad(x.day)}T09:00:00`,account:x.account,category:x.category,note:x.note,kind:x.kind,amount:x.amount,currency:x.currency});x.last=m}});
+ if(!add.length)return;const{data}=await sb.from('expenses').upsert(add,{onConflict:'user_id,occurred_at,amount,category,note',ignoreDuplicates:true}).select();
+ rows.push(...(data||[]));rows.sort((a,b)=>b.occurred_at.localeCompare(a.occurred_at));await saveS()}
+function cfg(){const cats=[...new Set(rows.filter(r=>r.kind==='Gastos').map(r=>r.category))].sort();
+ return `<div class="card"><h2>Tipos de cambio (1 unidad = X BOB)</h2><div class="row"><input id="r1" inputmode="decimal" value="${S.rates.USD}"><input id="r2" inputmode="decimal" value="${S.rates.EUR}"></div><div class="m">USD · EUR — ajústalos cuando quieras</div><br>
+ <h2>Categorías excluidas de estadísticas y arrastre (separadas por coma)</h2><input id="ex2" value="${esc(S.excl.join(', '))}"><br><br>
+ <h2>Presupuesto mensual por categoría (BOB)</h2>${cats.map(c=>`<div class="row" style="flex-wrap:nowrap;margin-bottom:6px"><span style="flex:2">${esc(c)}</span><input data-b="${esc(c)}" inputmode="decimal" value="${S.budgets[c]||''}" placeholder="—"></div>`).join('')}
+ <h2 style="margin-top:14px">Movimientos recurrentes (se crean solos al abrir la app)</h2>${S.rec.map((x,i)=>`<div class="li"><span>${esc(x.category)} · ${fmt(x.amount)} ${x.currency} · día ${x.day}</span><button class="x" data-rd="${i}">🗑</button></div>`).join('')}
+ <div class="row"><input id="rc" placeholder="Categoría"><input id="ra" placeholder="Importe" inputmode="decimal"><select id="rk"><option>Gastos</option><option>Ingreso</option></select><select id="ru"><option>BOB</option><option>USD</option><option>EUR</option></select><input id="rd" type="number" min="1" max="28" placeholder="Día 1-28"></div><br>
+ <button class="b g" id="ra2">Añadir recurrente</button><br><br><button class="b" id="sv">Guardar ajustes</button></div>`}
+function cfgBind(){const n=v=>parseFloat(String(v).replace(',','.'));
+ $('#sv').onclick=async()=>{S.rates.USD=n($('#r1').value)||S.rates.USD;S.rates.EUR=n($('#r2').value)||S.rates.EUR;S.excl=$('#ex2').value.split(',').map(x=>x.trim()).filter(Boolean);
+  S.budgets={};document.querySelectorAll('[data-b]').forEach(i=>{const v=n(i.value);if(v>0)S.budgets[i.dataset.b]=v});await saveS();toast('✓ Ajustes guardados')};
+ $('#ra2').onclick=async()=>{const a=n($('#ra').value),d=+$('#rd').value;if(!(a>0)||!(d>=1&&d<=28)||!$('#rc').value)return toast('Completa categoría, importe y día (1-28)');
+  S.rec.push({category:$('#rc').value.trim(),amount:a,kind:$('#rk').value,currency:$('#ru').value,day:d,account:'Cuentas bancarias',note:'Recurrente',start:nowIso().slice(0,7),last:null});await saveS();await recur();datos()};
+ document.querySelectorAll('[data-rd]').forEach(b=>b.onclick=async()=>{S.rec.splice(+b.dataset.rd,1);await saveS();datos()})}
 function exportCsv(){const H=['Según un período','Cuentas','Categoría','Nota','Ingreso/Gasto','Descripción','Importe','Moneda'],q=v=>`"${String(v??'').replace(/"/g,'""')}"`;
  const t='\ufeff'+[H.map(q).join(',')].concat(rows.map(r=>[r.occurred_at.replace('T',' '),r.account,r.category,r.note,r.kind,r.description,r.amount,r.currency].map(q).join(','))).join('\n');
  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([t],{type:'text/csv'}));a.download=`gastos-${nowIso().slice(0,10)}.csv`;a.click()}
