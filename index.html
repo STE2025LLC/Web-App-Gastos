@@ -91,7 +91,7 @@ function panel(){const ms=months();if(!ms.includes(month))month=ms[0]||nowIso().
  $('#app').innerHTML=`<div class="row" style="flex-wrap:nowrap"><h1 style="flex:2;margin:4px 0 10px">Panel</h1><select id="ms" style="flex:1">${ms.map(m=>`<option ${m===month?'selected':''}>${m}</option>`).join('')}</select></div>
  <div class="k4"><div class="card"><div class="k">Gastado</div><div class="v">${fmt(G)}</div><div class="m ${d>0?'neg':'pos'}">${d==null?'—':(d>0?'▲ ':'▼ ')+Math.abs(d).toFixed(1)+'% vs mes anterior'}</div></div>
  <div class="card"><div class="k">Ingresos</div><div class="v">${fmt(I)}</div></div>
- <div class="card"><div class="k">Disponible</div><div class="v ${av<0?'neg':'pos'}">${fmt(av)}</div><div class="m">Acumulado ${fmt(cr)}${I?`<br>Más ingresos ${fmt(I)}`:''}<br>Menos gasto ${fmt(G)}</div></div>
+ <div class="card"><div class="k">Disponible</div><div class="v ${av<0?'neg':'pos'}">${fmt(av)}</div><div class="m">Acumulado ${fmt(cr)}${I?`<br>Más ingresos ${fmt(I)}`:''}<br><span class="neg">Menos gasto ${fmt(G)}</span></div></div>
  <div class="card"><div class="k">Media mensual</div><div class="v">${fmt(avg)}</div></div></div>
  <div class="m" style="margin:12px 0">💱 1 USD = ${fmt(S.rates.USD)} BOB · 1 EUR = ${fmt(S.rates.EUR)} BOB (${S.mode})</div>
  <div class="card"><h2>Gasto e ingreso por mes (BOB)</h2><canvas id="c1"></canvas></div>
