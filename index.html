@@ -36,7 +36,7 @@ canvas{max-height:300px}.x{background:none;border:0;color:var(--mut);font-size:1
 const SB_URL='https://oaeeocgxmdelgqtlcjrg.supabase.co', SB_KEY='sb_publishable_JZ-9oPp9Lt6fekoxSUtz5A_Zx7awb8-';
 const sb=supabase.createClient(SB_URL,SB_KEY);
 let rows=[],user=null,tab='panel',month='',charts={};
-let S={rates:{BOB:1,USD:6.96,EUR:8.1},budgets:{},excl:['Dinero restante'],rec:[]};
+let S={mode:'oficial',fx:{},rates:{BOB:1,USD:11.84,EUR:13.23},budgets:{},excl:['Dinero restante'],rec:[]};
 const $=s=>document.querySelector(s),pad=n=>String(n).padStart(2,'0');
 const fmt=n=>(+n).toLocaleString('es-BO',{minimumFractionDigits:2,maximumFractionDigits:2});
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -45,7 +45,7 @@ const PAL=['#6c8cff','#34d399','#fbbf24','#f87171','#a78bfa','#22d3ee','#fb923c'
 function toast(t){const e=$('#toast');e.textContent=t;e.classList.add('s');setTimeout(()=>e.classList.remove('s'),2200)}
 async function load(){rows=[];for(let i=0;;i+=1000){const{data,error}=await sb.from('expenses').select('*').order('occurred_at',{ascending:false}).order('id').range(i,i+999);if(error){toast(error.message);break}rows.push(...data);if(data.length<1000)break}await loadS()}
 const months=()=>[...new Set(rows.map(r=>r.occurred_at.slice(0,7)))].sort().reverse();
-const bob=r=>+r.amount*(S.rates[r.currency]||1),ok=r=>!S.excl.includes((r.category||'').trim());
+const bob=r=>+r.amount*(r.fx||S.rates[r.currency]||1),ok=r=>!S.excl.includes((r.category||'').trim());
 const sum=(m,k='Gastos')=>rows.filter(r=>r.kind===k&&ok(r)&&r.occurred_at.startsWith(m)).reduce((a,r)=>a+bob(r),0);
 const carry=m=>months().filter(x=>x<m).reduce((a,x)=>a+sum(x,'Ingreso')-sum(x),0);
 function go(t){tab=t;history.replaceState(null,'',t==='nuevo'?'#nuevo':'#');render()}
@@ -69,7 +69,7 @@ function panel(){const ms=months();if(!ms.includes(month))month=ms[0]||nowIso().
  <div class="card"><div class="k">Ingresos</div><div class="v">${fmt(I)}</div></div>
  <div class="card"><div class="k">Disponible (con arrastre)</div><div class="v ${carry(month)+I-G<0?'neg':'pos'}">${fmt(carry(month)+I-G)}</div><div class="m">Arrastre ${fmt(carry(month))} · mes ${fmt(I-G)}</div></div>
  <div class="card"><div class="k">Media mensual</div><div class="v">${fmt(avg)}</div></div></div><br>
- <div class="card"><h2>Gasto e ingreso por mes (BOB)</h2><canvas id="c1"></canvas></div>
+ <div class="m" style="margin-bottom:10px">💱 1 USD = ${fmt(S.rates.USD)} BOB · 1 EUR = ${fmt(S.rates.EUR)} BOB (${S.mode})</div><div class="card"><h2>Gasto e ingreso por mes (BOB)</h2><canvas id="c1"></canvas></div>
  <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(300px,1fr))"><div class="card"><h2>Por categoría · ${month}</h2><canvas id="c2"></canvas></div>
  <div class="card"><h2>Ranking · ${month}</h2>${cl.map(([c,v])=>`<div style="margin-bottom:12px"><div class="row" style="flex-wrap:nowrap"><span>${esc(c)}</span><b style="text-align:right">${fmt(v)}</b></div>${S.budgets[c]?`<div class="bar"><i style="width:${Math.min(100,v/S.budgets[c]*100)}%;background:${v>S.budgets[c]?'var(--bad)':'var(--ok)'}"></i></div><div class="m">${fmt(v)} / ${fmt(S.budgets[c])} (${(v/S.budgets[c]*100).toFixed(0)}%)</div>`:`<div class="bar"><i style="width:${v/cl[0][1]*100}%"></i></div><div class="m">${(v/G*100).toFixed(1)}%</div>`}</div>`).join('')||'<div class="m">Sin gastos este mes</div>'}</div></div>`;
  $('#ms').onchange=e=>{month=e.target.value;panel()};
@@ -93,7 +93,7 @@ function nuevo(e){const f={};rows.filter(r=>r.kind==='Gastos').forEach(r=>f[r.ca
  document.querySelectorAll('.chip[data-c]').forEach(b=>b.onclick=()=>{$('#c').value=b.dataset.c;document.querySelectorAll('.chip[data-c]').forEach(x=>x.classList.toggle('on',x===b))});
  const sk=k=>{kind=k;$('#k1').classList.toggle('on',k==='Gastos');$('#k2').classList.toggle('on',k==='Ingreso')};$('#k1').onclick=()=>sk('Gastos');$('#k2').onclick=()=>sk('Ingreso');
  $('#s').onclick=async()=>{const amt=parseFloat($('#a').value.replace(',','.'));if(!(amt>0))return toast('Pon un importe');
-  const r={occurred_at:$('#d').value.slice(0,16)+':00',account:$('#ac').value,category:$('#c').value||'Otros',note:$('#n').value.trim(),kind,amount:amt,currency:$('#cu').value};
+  const r={occurred_at:$('#d').value.slice(0,16)+':00',account:$('#ac').value,category:$('#c').value||'Otros',note:$('#n').value.trim(),kind,amount:amt,currency:$('#cu').value};r.fx=(e&&e.currency===r.currency&&e.fx)?e.fx:(S.rates[r.currency]||1);
   const fl=$('#im').files[0];if(fl){const p=`${user.id}/${Date.now()}.${(fl.name.split('.').pop()||'jpg').toLowerCase()}`;const u=await sb.storage.from('receipts').upload(p,fl);if(u.error)return toast(u.error.message);r.attachment=p}
   const{data,error}=await(e?sb.from('expenses').update(r).eq('id',e.id):sb.from('expenses').insert({...r,user_id:user.id})).select().single();if(error)return toast(error.message);
   if(e)rows=rows.map(x=>x.id===e.id?data:x);else rows.unshift(data);rows.sort((a,b)=>b.occurred_at.localeCompare(a.occurred_at));
@@ -110,21 +110,30 @@ function datos(){$('#app').innerHTML=`<h1>Datos</h1>${cfg()}<div class="card"><h
  <div class="card"><div class="m">${esc(user.email)}</div><br><button class="b g" id="out">Cerrar sesión</button></div>`;
  $('#ex').onclick=exportCsv;cfgBind();$('#f').onchange=e=>importFile(e.target.files[0]);$('#out').onclick=()=>sb.auth.signOut()}
 const nx=m=>{const[y,k]=m.split('-').map(Number);return k==12?`${y+1}-01`:`${y}-${pad(k+1)}`};
+const jget=async u=>{const r=await fetch(u,{signal:AbortSignal.timeout(6000)});if(!r.ok)throw 0;return r.json()};
+async function autoFx(){const o={};
+ try{const t=(await jget('https://apibcb.cucu.bo/api/v1/tc/oficial')).tc_oficial||{};o.of=parseFloat(t.compra??t.base??t.valor)}catch{try{const d=await jget('https://bo.dolarapi.com/v1/dolares/oficial');o.of=parseFloat(d.venta??d.compra)}catch{}}
+ try{o.pa=parseFloat((await jget('https://criptoya.com/api/binancep2p/usdt/bob/500')).bid)}catch{}
+ try{o.eu=(await jget('https://open.er-api.com/v6/latest/USD')).rates.EUR}catch{}
+ if(o.of>3&&o.of<30)S.fx.of=o.of;if(o.pa>5&&o.pa<30)S.fx.pa=o.pa;if(o.eu>.3&&o.eu<3)S.fx.eu=o.eu;S.fx.at=nowIso();applyFx()}
+function applyFx(){if(S.mode==='manual')return;const u=S.fx[S.mode==='paralelo'?'pa':'of']||S.rates.USD;S.rates.USD=u;if(S.fx.eu)S.rates.EUR=u/S.fx.eu}
 const saveS=()=>sb.from('settings').upsert({user_id:user.id,data:S});
-async function loadS(){const{data}=await sb.from('settings').select('data').maybeSingle();if(data?.data)S={...S,...data.data,rates:{...S.rates,...(data.data.rates||{})}};await recur()}
+async function loadS(){const{data}=await sb.from('settings').select('data').maybeSingle();if(data?.data)S={...S,...data.data,rates:{...S.rates,...(data.data.rates||{})}};if(S.mode!=='manual'){applyFx();await autoFx();saveS()}await recur()}
 async function recur(){const cur=nowIso().slice(0,7),td=+nowIso().slice(8,10),add=[];
- S.rec.forEach(x=>{for(let m=x.last?nx(x.last):x.start;m<=cur;m=nx(m)){if(m===cur&&x.day>td)break;add.push({user_id:user.id,occurred_at:`${m}-${pad(x.day)}T09:00:00`,account:x.account,category:x.category,note:x.note,kind:x.kind,amount:x.amount,currency:x.currency});x.last=m}});
+ S.rec.forEach(x=>{for(let m=x.last?nx(x.last):x.start;m<=cur;m=nx(m)){if(m===cur&&x.day>td)break;add.push({user_id:user.id,occurred_at:`${m}-${pad(x.day)}T09:00:00`,account:x.account,category:x.category,note:x.note,kind:x.kind,amount:x.amount,currency:x.currency,fx:S.rates[x.currency]||1});x.last=m}});
  if(!add.length)return;const{data}=await sb.from('expenses').upsert(add,{onConflict:'user_id,occurred_at,amount,category,note',ignoreDuplicates:true}).select();
  rows.push(...(data||[]));rows.sort((a,b)=>b.occurred_at.localeCompare(a.occurred_at));await saveS()}
 function cfg(){const cats=[...new Set(rows.filter(r=>r.kind==='Gastos').map(r=>r.category))].sort();
- return `<div class="card"><h2>Tipos de cambio (1 unidad = X BOB)</h2><div class="row"><input id="r1" inputmode="decimal" value="${S.rates.USD}"><input id="r2" inputmode="decimal" value="${S.rates.EUR}"></div><div class="m">USD · EUR — ajústalos cuando quieras</div><br>
+ return `<div class="card"><h2>Tipo de cambio a BOB</h2><select id="fm"><option value="oficial" ${S.mode==='oficial'?'selected':''}>Automático · dólar oficial (BCB)</option><option value="paralelo" ${S.mode==='paralelo'?'selected':''}>Automático · dólar paralelo (Binance P2P)</option><option value="manual" ${S.mode==='manual'?'selected':''}>Manual</option></select>
+ <div class="m" style="margin:8px 0">Ahora: 1 USD = ${fmt(S.rates.USD)} BOB · 1 EUR = ${fmt(S.rates.EUR)} BOB<br>Oficial ${S.fx.of||'—'} · Paralelo ${S.fx.pa||'—'} · EUR/USD ${S.fx.eu||'—'}${S.fx.at?' · leído '+S.fx.at.slice(0,16).replace('T',' '):''}</div>
+ <div class="row"><input id="r1" inputmode="decimal" value="${S.rates.USD}"><input id="r2" inputmode="decimal" value="${S.rates.EUR}"></div><div class="m">USD · EUR en BOB. Solo se usan en modo Manual.</div><br>
  <h2>Categorías excluidas de estadísticas y arrastre (separadas por coma)</h2><input id="ex2" value="${esc(S.excl.join(', '))}"><br><br>
  <h2>Presupuesto mensual por categoría (BOB)</h2>${cats.map(c=>`<div class="row" style="flex-wrap:nowrap;margin-bottom:6px"><span style="flex:2">${esc(c)}</span><input data-b="${esc(c)}" inputmode="decimal" value="${S.budgets[c]||''}" placeholder="—"></div>`).join('')}
  <h2 style="margin-top:14px">Movimientos recurrentes (se crean solos al abrir la app)</h2>${S.rec.map((x,i)=>`<div class="li"><span>${esc(x.category)} · ${fmt(x.amount)} ${x.currency} · día ${x.day}</span><button class="x" data-rd="${i}">🗑</button></div>`).join('')}
  <div class="row"><input id="rc" placeholder="Categoría"><input id="ra" placeholder="Importe" inputmode="decimal"><select id="rk"><option>Gastos</option><option>Ingreso</option></select><select id="ru"><option>BOB</option><option>USD</option><option>EUR</option></select><input id="rd" type="number" min="1" max="28" placeholder="Día 1-28"></div><br>
  <button class="b g" id="ra2">Añadir recurrente</button><br><br><button class="b" id="sv">Guardar ajustes</button></div>`}
 function cfgBind(){const n=v=>parseFloat(String(v).replace(',','.'));
- $('#sv').onclick=async()=>{S.rates.USD=n($('#r1').value)||S.rates.USD;S.rates.EUR=n($('#r2').value)||S.rates.EUR;S.excl=$('#ex2').value.split(',').map(x=>x.trim()).filter(Boolean);
+ $('#sv').onclick=async()=>{S.mode=$('#fm').value;if(S.mode==='manual'){S.rates.USD=n($('#r1').value)||S.rates.USD;S.rates.EUR=n($('#r2').value)||S.rates.EUR}else applyFx();S.excl=$('#ex2').value.split(',').map(x=>x.trim()).filter(Boolean);
   S.budgets={};document.querySelectorAll('[data-b]').forEach(i=>{const v=n(i.value);if(v>0)S.budgets[i.dataset.b]=v});await saveS();toast('✓ Ajustes guardados')};
  $('#ra2').onclick=async()=>{const a=n($('#ra').value),d=+$('#rd').value;if(!(a>0)||!(d>=1&&d<=28)||!$('#rc').value)return toast('Completa categoría, importe y día (1-28)');
   S.rec.push({category:$('#rc').value.trim(),amount:a,kind:$('#rk').value,currency:$('#ru').value,day:d,account:'Cuentas bancarias',note:'Recurrente',start:nowIso().slice(0,7),last:null});await saveS();await recur();datos()};
@@ -142,7 +151,7 @@ async function importFile(f){if(!f)return;const st=$('#st');st.textContent='Leye
  if(C.amt<0||C.kind<0)return st.textContent='No reconozco las columnas (faltan Importe / Ingreso/Gasto).';
  const t=s=>(s==null?'':String(s)).trim(),out=[];
  for(const r of a.slice(1)){const d=pd(r[0]),amt=Math.abs(parseFloat(String(r[C.amt]).replace(',','.')));if(!d||!amt)continue;
-  out.push({user_id:user.id,occurred_at:d,account:t(r[C.acc])||'Cuentas bancarias',category:t(r[C.cat])||'Otros',note:t(r[C.note]),description:t(r[C.desc])||null,kind:/ingreso/i.test(r[C.kind])?'Ingreso':'Gastos',amount:amt,currency:t(r[C.cur])||'BOB'})}
+  out.push({user_id:user.id,occurred_at:d,account:t(r[C.acc])||'Cuentas bancarias',category:t(r[C.cat])||'Otros',note:t(r[C.note]),description:t(r[C.desc])||null,kind:/ingreso/i.test(r[C.kind])?'Ingreso':'Gastos',amount:amt,currency:t(r[C.cur])||'BOB',fx:S.rates[t(r[C.cur])]||1})}
  let n=0;for(let i=0;i<out.length;i+=500){st.textContent=`Importando ${i}/${out.length}…`;
   const{data,error}=await sb.from('expenses').upsert(out.slice(i,i+500),{onConflict:'user_id,occurred_at,amount,category,note',ignoreDuplicates:true}).select('id');
   if(error){st.textContent='Error: '+error.message;return}n+=data.length}
